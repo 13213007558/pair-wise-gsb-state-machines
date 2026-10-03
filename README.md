@@ -317,6 +317,50 @@ class StarshipBridge
 end
 ```
 
+## Bounded Petri Nets
+
+Use `StateMachines::PetriNet::BoundedPetriNet` when a workflow has multiple
+in-progress instances and shared resources. Every place has an integer capacity
+and stores an integer token count, rather than merely being marked as present or
+absent. Transitions have weighted input, output, and read-only arcs.
+
+```ruby
+net = StateMachines::PetriNet::BoundedPetriNet.new do
+  place :waiting, capacity: 2, tokens: 2
+  place :active, capacity: 1, tokens: 0
+  place :resource, capacity: 1, tokens: 1
+  place :holding, capacity: 1, tokens: 0
+
+  # Input tokens are removed and output tokens are added atomically.
+  transition :acquire,
+             input: { waiting: 1, resource: 1 },
+             output: { active: 1, holding: 1 }
+  transition :release,
+             input: { active: 1, holding: 1 },
+             output: { waiting: 1, resource: 1 }
+
+  # A read arc enables a transition without consuming tokens.
+  transition :inspect, read: { resource: 1 }
+end
+
+net.fire(:acquire)                 # => true
+net.enabled_transitions            # => [:release]
+net.fire(:inspect)                 # => false
+net.fire(:release)                 # => true
+```
+
+Offline reachability and deadlock analysis returns immediately when a bounded
+number of distinct markings has been collected, without treating the partial
+result as complete:
+
+```ruby
+analysis = net.analyze_reachability(state_limit: 10_000)
+analysis.complete?                  # => true or false if the limit was reached
+analysis.reachable_markings        # => frozen marking hashes
+analysis.deadlock_markings         # => markings with no enabled transition
+analysis.deadlocked?               # => only reports true for a completed analysis
+```
+
 ## Error Handling
 
 State guards provide comprehensive error checking:
