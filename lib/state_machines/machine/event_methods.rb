@@ -54,6 +54,20 @@ module StateMachines
       def paths_for(object, requirements = {})
         PathCollection.new(object, self, requirements)
       end
+
+      # Analyzes this machine as a fixed probabilistic model, computing the
+      # probability of reaching the given target state from every state along
+      # with the expected cumulative cost (and time) of doing so.  Only
+      # transitions defined with a :probability option are considered.
+      #
+      # == Example
+      #
+      #   analysis = Vehicle.state_machine.probabilistic_analysis(:parked)
+      #   analysis.absorption_probability(:idling)  # => 1.0
+      #   analysis.expected_cost(:idling)           # => 2.5
+      def probabilistic_analysis(target)
+        ProbabilisticAnalysis.new(self, target: target)
+      end
     end
   end
 end

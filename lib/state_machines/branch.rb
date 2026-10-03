@@ -29,8 +29,21 @@ module StateMachines
     # * +to+ / +except_to+
     attr_reader :known_states
 
+    # The probability of this branch being taken when multiple probabilistic
+    # branches leave the same state.  Only used for offline probabilistic
+    # analysis; always nil for regular transitions.
+    attr_reader :probability
+
+    # The cost incurred when this branch is taken.  Only used for offline
+    # probabilistic analysis; always nil for regular transitions.
+    attr_reader :cost
+
     # Creates a new branch
     def initialize(options = {}) # :nodoc:
+      # Extract offline probabilistic analysis metadata
+      @probability = options.delete(:probability)
+      @cost = options.delete(:cost)
+
       # Build conditionals
       @if_condition = options.delete(:if)
       @unless_condition = options.delete(:unless)
