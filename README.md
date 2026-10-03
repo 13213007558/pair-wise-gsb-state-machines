@@ -920,6 +920,49 @@ You can customize the output by passing in options to the `draw` method, such as
 Vehicle.state_machine.draw(io: $stderr) # Outputs the state machine diagram to stderr
 ```
 
+### Synchronizing sequences
+
+When the current state of an object has been lost (for example, after a device
+reconnects) but events can still be sent to it, a *synchronizing sequence* can
+bring the machine back to a single known state.  A synchronizing sequence is
+one sequence of events that drives the machine to the same final state no
+matter which of the possible states it actually started in.
+
+For machines with unguarded transitions, the shortest synchronizing sequence
+can be computed like so:
+
+```ruby
+sequence = Vehicle.state_machine.synchronizing_sequence
+sequence.synchronized?   # => true
+sequence.events          # => [:shift_up, :shift_up]
+sequence.state           # => :driving (the state the machine is guaranteed to end up in)
+sequence.steps           # => each event along with the possible states remaining after it
+```
+
+If the current state is only known to be within a subset of states, the search
+can be restricted with the `:from` option, and events that cannot be fired by
+the caller can be left out with the `:except` option:
+
+```ruby
+Vehicle.state_machine.synchronizing_sequence(from: [:idling, :driving], except: :repair)
+```
+
+Note that firing an event that has no transition from a particular state is
+treated as leaving that state unchanged, matching the runtime behavior of the
+machine.  An `ArgumentError` is raised if any of the usable events has guarded
+transitions, since those cannot be resolved statically; exclude such events
+with `:except`.
+
+Not every machine can be synchronized.  In that case the result exposes a pair
+of states that can never be merged into a single state by any sequence of
+events:
+
+```ruby
+sequence = Vehicle.state_machine.synchronizing_sequence
+sequence.synchronized?      # => false
+sequence.unmergeable_pair   # => [:a, :b]
+```
+
 #### Dynamic definitions
 
 There may be cases where the definition of a state machine is **dynamic**.

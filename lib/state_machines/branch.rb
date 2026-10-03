@@ -137,6 +137,16 @@ module StateMachines
       machine.renderer.draw_branch(self, graph, event, valid_states, io)
     end
 
+    # Whether this branch is guarded by any if/unless conditionals.  Guarded
+    # branches cannot be matched statically (without an object) since the
+    # conditions may depend on the object's runtime state.
+    def guarded?
+      !if_condition.nil? || !unless_condition.nil? ||
+        !@if_state_condition.nil? || !@unless_state_condition.nil? ||
+        !@if_all_states_condition.nil? || !@unless_all_states_condition.nil? ||
+        !@if_any_state_condition.nil? || !@unless_any_state_condition.nil?
+    end
+
     protected
 
     # Builds a matcher strategy to use for the given options.  If neither a
