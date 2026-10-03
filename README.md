@@ -251,6 +251,36 @@ vehicle.fire_events!(:ignite, :enable_alarm)    # => StateMachines:InvalidParall
 
 State machines can coordinate with each other using state guards, allowing transitions to depend on the state of other state machines within the same object. This enables complex system modeling where components are interdependent.
 
+## Bounded Petri Nets
+
+Use `StateMachines::BoundedPetriNet::Net` for offline analysis of multiple work-in-progress instances and shared resources. Places store integer token counts, places have finite capacities, and transitions can use weighted input, output, and read-only arcs. A transition fires atomically: all token removals and additions must succeed, including the output capacity check.
+
+```ruby
+net = StateMachines::BoundedPetriNet::Net.define(
+  initial_marking: { waiting: 2, tool_available: 1, tool_held: 0, power: 1 }
+) do
+  place :waiting, capacity: 2
+  place :working, capacity: 1
+  place :tool_available, capacity: 1
+  place :tool_held, capacity: 1
+  place :power, capacity: 1
+
+  transition :start,
+             inputs: { waiting: 1, tool_available: 1 },
+             outputs: { working: 1, tool_held: 1 },
+             read_arcs: { power: 1 }
+  transition :finish,
+             inputs: { working: 1, tool_held: 1 },
+             outputs: { waiting: 1, tool_available: 1 }
+end
+
+result = net.analyze(max_states: 1000)
+result.complete?            # true when the state cap was not reached
+result.deadlock_markings    # markings with no enabled transition
+net.fire(:start)            # returns the next Marking, or nil if not enabled
+net.fire!(:start)           # raises when the transition is not enabled
+```
+
 ## State Guard Options
 
 ### Single State Guards
