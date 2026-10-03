@@ -481,6 +481,46 @@ vehicle.state_name              # => :parked
 # vehicle.state = :parked
 ```
 
+## Learning a State Machine from a Legacy Object
+
+Sometimes you inherit an object that only exposes an event interface - you
+can fire events and observe what they return, but its state machine was
+never documented. `StateMachines::ActiveLearner` reverse-engineers a finite
+Mealy model of such an object using active automata learning (L* adapted to
+Mealy machines).
+
+You provide three in-process callbacks:
+
+* `reset` - returns the object to its initial state
+* `step` - fires one input event and returns its observable output
+* `equivalence` - receives the current hypothesis and returns `nil` to accept
+  it, or a counterexample: a sequence of inputs on which the hypothesis and
+  the real object disagree
+
+```ruby
+learner = StateMachines::ActiveLearner.new(
+  inputs: %i[up down],
+  reset: -> { @lock = LegacyCodeLock.new },
+  step: ->(event) { @lock.press(event) },
+  equivalence: ->(hypothesis) { MyOracle.check(hypothesis) }
+)
+learner.learn
+
+learner.stop_reason                # => :equivalent (or :max_membership_queries / :max_equivalence_queries)
+learner.statistics.membership_queries  # how often the object was driven
+learner.statistics.equivalence_queries # how often the oracle was consulted
+
+machine = learner.hypothesis       # a StateMachines::MealyMachine
+machine.run(%i[up up down])        # => [:tick, :tick, :unlocked]
+puts machine.to_dot                # Graphviz rendering for documentation
+```
+
+Counterexamples returned by the equivalence callback are folded back into
+the learner's observation table, so each round produces a corrected global
+model rather than a special case for the reported sequence. Learning stops
+when the oracle accepts the hypothesis, or when the
+`max_membership_queries` / `max_equivalence_queries` budgets are exhausted.
+
 ## Testing
 
 State Machines provides an optional `TestHelper` module with assertion methods to make testing state machines easier and more expressive.
