@@ -481,6 +481,88 @@ vehicle.state_name              # => :parked
 # vehicle.state = :parked
 ```
 
+## Active Learning
+
+Use `StateMachines::ActiveLearning.learn` to document an older object that exposes only event calls. The learner performs Mealy-machine L* inference and never needs to read the target's internal state.
+
+Provide three in-process callbacks:
+
+* `reset`: returns the target to its initial state.
+* `step`: sends one input event and returns the observed output.
+* `equivalence_query`: receives the current hypothesis and returns `nil`/`true` when it is equivalent, or an array containing a counterexample input sequence.
+
+```ruby
+alphabet = %i[ignite shift_up park]
+state = :parked
+
+reset = -> { state = :parked }
+step = lambda do |event|
+  case [state, event]
+  in [:parked, :ignite]
+    state = :idling
+    :started
+  in [:idling, :shift_up]
+    state = :first_gear
+    :shifted
+  in [_, :park]
+    state = :parked
+    :parked
+  else
+    :noop
+  end
+end
+
+oracle = lambda do |hypothesis, stats|
+  # This bounded exhaustive oracle is an in-process example. A real oracle can
+  # also be a simulator, reference implementation, or another trusted model.
+  counterexample = nil
+  (0..3).each do |length|
+    alphabet.repeated_permutation(length).each do |sequence|
+      reset.call
+      observed = sequence.map { |event| step.call(event) }
+      if observed != hypothesis.outputs_for(sequence)
+        counterexample = sequence
+        break
+      end
+    end
+    break if counterexample
+  end
+
+  puts stats.to_h
+  counterexample
+end
+
+result = StateMachines::ActiveLearning.learn(
+  alphabet,
+  reset: reset,
+  step: step,
+  equivalence_query: oracle
+)
+
+result.stop_reason     # => :equivalent
+result.model.states    # => [:q0, :q1, ...]
+result.model.outputs_for(%i[ignite shift_up]) # => [:started, :shifted]
+result.stats.to_h
+# => {
+#      membership_queries: 12,
+#      membership_steps: 34,
+#      equivalence_queries: 2,
+#      counterexamples: 1,
+#      total_queries: 14
+#    }
+
+puts result.model.to_mermaid
+```
+
+The counterexample and all of its distinguishing prefixes/suffixes are incorporated into the observation table, so the next hypothesis remains valid for the returned trace and generalizes it across equivalent states. The learned `MealyMachine` exposes `states`, `transitions`, `run`, `outputs_for`, `to_h`, and `to_mermaid`.
+
+Observable stop reasons are:
+
+* `:equivalent`: the equivalence callback accepted the hypothesis.
+* `:invalid_counterexample`: the returned sequence matched the current hypothesis.
+* `:max_iterations`: the `max_iterations` budget was reached.
+* `:max_membership_queries`: the `max_membership_queries` budget was reached before another hypothesis could be built.
+
 ## Testing
 
 State Machines provides an optional `TestHelper` module with assertion methods to make testing state machines easier and more expressive.
