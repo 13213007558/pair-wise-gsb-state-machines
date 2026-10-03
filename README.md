@@ -331,6 +331,64 @@ event :another_invalid, if_state: { shields: :nonexistent_state }
 # => ArgumentError: State 'nonexistent_state' is not defined in state machine 'shields'
 ```
 
+## Synchronizing Sequences
+
+When the current state of an object has been lost -- for example, after a
+device reconnects -- but events can still be sent to it, a *synchronizing
+sequence* can drive the machine back to a single known state no matter which
+state it currently occupies.  For finite machines with deterministic,
+guard-free transitions, the shortest such sequence can be computed:
+
+```ruby
+class Device
+  state_machine initial: :disconnected do
+    state :booting, :ready
+
+    event :boot do
+      transition disconnected: :booting
+    end
+
+    event :complete do
+      transition booting: :ready
+    end
+
+    event :reset do
+      transition ready: :disconnected
+    end
+  end
+end
+
+sequence = Device.state_machine.synchronizing_sequence
+sequence.synchronizes?   # => true
+sequence.events          # => [:boot, :complete]
+sequence.final_state     # => :ready
+sequence.steps           # => [#<struct Step event=:boot, remaining_states=[:booting, :ready]>,
+                         #      #<struct Step event=:complete, remaining_states=[:ready]>]
+```
+
+The search runs breadth-first over sets of possible states, so the result is
+guaranteed to be the shortest synchronizing sequence.  The search can be
+customized:
+
+```ruby
+# Only synchronize from a known subset of states
+Device.state_machine.synchronizing_sequence(from_states: [:disconnected, :booting])
+
+# Exclude events that cannot be fired externally
+Device.state_machine.synchronizing_sequence(except_events: [:reset])
+```
+
+If no synchronizing sequence exists, a pair of states that can never be
+merged into one is reported instead:
+
+```ruby
+sequence.synchronizes?        # => false
+sequence.unmergeable_pair     # => [:booting, :ready]
+```
+
+Events whose transitions use `:if` / `:unless` conditions cannot be resolved
+without an object and will raise an `ArgumentError`.
+
 # Asynchronous State Machines
 
 State machines can operate asynchronously for high-performance applications. This is ideal for I/O-bound tasks, such as in web servers or other concurrent environments, where you don't want a long-running state transition (like one involving a network call) to block the entire thread.

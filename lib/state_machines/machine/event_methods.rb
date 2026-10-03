@@ -54,6 +54,27 @@ module StateMachines
       def paths_for(object, requirements = {})
         PathCollection.new(object, self, requirements)
       end
+
+      # Finds the shortest sequence of events that drives this machine into a
+      # single known state, regardless of which of the possible states it
+      # currently occupies.  If no such sequence exists, the pair of states
+      # that can never be merged is reported instead.
+      #
+      # Configuration options:
+      # * <tt>:from_states</tt> - The states the machine may currently occupy.
+      #   Defaults to all known states.
+      # * <tt>:except_events</tt> - Events that cannot be fired and must be
+      #   excluded from the sequence.
+      #
+      # == Examples
+      #
+      #   sequence = machine.synchronizing_sequence(except_events: [:service])
+      #   sequence.synchronizes?  # => true
+      #   sequence.events       # => [:reset, :ignite]
+      #   sequence.final_state  # => :idling
+      def synchronizing_sequence(requirements = {})
+        SynchronizingSequence.new(self, requirements)
+      end
     end
   end
 end
