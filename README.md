@@ -42,6 +42,7 @@ Below is an example of many of the features offered by this plugin, including:
 * Customized state values
 * Parallel events
 * Path analysis
+* Offline probabilistic analysis (absorption probabilities and expected costs)
 
 Class definition:
 
@@ -316,6 +317,44 @@ class StarshipBridge
   end
 end
 ```
+
+## Offline Probabilistic Analysis
+
+`StateMachines::ProbabilisticAnalysis` layers a fixed-probability model on top of a
+machine's state space for offline analysis.  Each probabilistic branch connects two
+states with a fixed probability and a transition cost; nothing is learned or
+optimized.  The analysis computes, for a chosen terminal state:
+
+* the probability of eventually reaching it from every state (absorption
+  probabilities), and
+* the expected cumulative cost of reaching it from every state (with the default
+  cost of 1 per branch, this is the expected completion time in transitions).
+
+States that can get trapped forever in a closed loop that never reaches the
+target report an expected cost of `Float::INFINITY`, while their absorption
+probabilities are still computed:
+
+```ruby
+machine = StateMachines::Machine.new(Class.new)
+machine.state :start, :spin_a, :spin_b, :done
+
+analysis = StateMachines::ProbabilisticAnalysis.new(machine)
+analysis.branch from: :start, to: :done, probability: 0.5, cost: 2
+analysis.branch from: :start, to: :spin_a, probability: 0.5
+analysis.branch from: :spin_a, to: :spin_b, probability: 1.0
+analysis.branch from: :spin_b, to: :spin_a, probability: 1.0  # bad closed loop
+
+analysis.outgoing_probability_sums     # => {start: 1.0, spin_a: 1.0, spin_b: 1.0}
+analysis.absorption_probabilities(to: :done)
+# => {start: 0.5, spin_a: 0.0, spin_b: 0.0, done: 1.0}
+analysis.expected_costs(to: :done)
+# => {start: Infinity, spin_a: Infinity, spin_b: Infinity, done: 0.0}
+```
+
+The model is validated before any computation: every branch endpoint must be a
+known state, and the outgoing probabilities of each state must sum to 1
+(`ArgumentError` is raised otherwise).  States without outgoing branches are
+treated as absorbing.
 
 ## Error Handling
 
